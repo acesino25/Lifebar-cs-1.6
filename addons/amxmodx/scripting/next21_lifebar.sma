@@ -7,7 +7,7 @@
 #endif
 
 #define PLUGIN "Lifebar"
-#define VERSION "1.1"
+#define VERSION "1.2"
 #define AUTHOR "Psycrow"
 
 // #define COLORED_LIFEBAR
@@ -19,7 +19,8 @@
     #define LIFEBAR_RENDERAMT 255.0
 #endif
 
-#define LIFEBAR_SCALE 0.2
+#define LIFEBAR_SCALE_DEFAULT 0.2
+#define LIFEBAR_OFFSET_Z_DEFAULT 45.0
 
 new const MODELS_LIFEBAR[2][] = {
     "sprites/next21_efk/lifebar_def.spr",
@@ -35,10 +36,22 @@ enum
     CVAR_END
 }
 
+enum
+{
+    CVARF_OFFSET_X,         // horizontal X offset of the sprite above the player's head
+    CVARF_OFFSET_Y,         // lateral Y offset of the sprite above the player's head (side-to-side)
+    CVARF_OFFSET_Z,         // vertical Z offset of the sprite above the player's head
+    CVARF_SCALE,            // scale of the sprite
+
+    CVARF_END
+}
+
 
 new g_iLifebar[33], bool:g_isAlive[33], g_iTeam[33]
 new g_ptEnvSprite
 new g_pCvars[CVAR_END], g_iCvars[CVAR_END]
+new g_pCvarsF[CVARF_END]
+new Float:g_fCvarsF[CVARF_END]
 
 public plugin_precache()
 {
@@ -63,11 +76,22 @@ public plugin_init()
     g_pCvars[CVAR_ALIVE] = register_cvar("lifebar_alive", "0")
     g_pCvars[CVAR_MAX_HEALTH] = register_cvar("lifebar_max_health", "100")
 
+    g_pCvarsF[CVARF_OFFSET_X] = register_cvar("lifebar_offset_x", "0.0")
+    g_pCvarsF[CVARF_OFFSET_Y] = register_cvar("lifebar_offset_y", "0.0")
+    g_pCvarsF[CVARF_OFFSET_Z] = register_cvar("lifebar_offset_z", "45.0")
+    g_pCvarsF[CVARF_SCALE] = register_cvar("lifebar_scale", "0.2")
+
     #if AMXX_VERSION_NUM > 183
         for (new i; i < CVAR_END; i++)
             bind_pcvar_num(g_pCvars[i], g_iCvars[i])
+        for (new i; i < CVARF_END; i++)
+            bind_pcvar_float(g_pCvarsF[i], g_fCvarsF[i])
         hook_cvar_change(g_pCvars[CVAR_TEAM], "cvar_team_changed")
         hook_cvar_change(g_pCvars[CVAR_ALIVE], "cvar_alive_changed")
+        hook_cvar_change(g_pCvarsF[CVARF_OFFSET_X], "cvar_offset_changed")
+        hook_cvar_change(g_pCvarsF[CVARF_OFFSET_Y], "cvar_offset_changed")
+        hook_cvar_change(g_pCvarsF[CVARF_OFFSET_Z], "cvar_offset_changed")
+        hook_cvar_change(g_pCvarsF[CVARF_SCALE], "cvar_offset_changed")
     #else
         register_event("HLTV", "update_cvars", "a", "1=0", "2=0")
         update_cvars()
@@ -86,8 +110,13 @@ public client_putinserver(iPlayer)
     {
         set_pev(iLifeBar, pev_movetype, MOVETYPE_FOLLOW)
         set_pev(iLifeBar, pev_aiment, iPlayer)
-        set_pev(iLifeBar, pev_view_ofs, Float:{0.0, 0.0, 45.0})
-        set_pev(iLifeBar, pev_scale, LIFEBAR_SCALE)
+
+        new Float:fOffset[3]
+        fOffset[0] = g_fCvarsF[CVARF_OFFSET_X]
+        fOffset[1] = g_fCvarsF[CVARF_OFFSET_Y]
+        fOffset[2] = g_fCvarsF[CVARF_OFFSET_Z]
+        set_pev(iLifeBar, pev_view_ofs, fOffset)
+        set_pev(iLifeBar, pev_scale, g_fCvarsF[CVARF_SCALE])
         set_pev(iLifeBar, pev_effects, EF_NODRAW)
 
         #if defined COLORED_LIFEBAR
@@ -214,15 +243,39 @@ public Event_TeamInfo()
 
     public cvar_alive_changed(pCvar, const szOldValue[], const szNewValue[])
         switch_ATFP(g_iCvars[CVAR_TEAM] || str_to_num(szNewValue))
+
+    public cvar_offset_changed(pCvar, const szOldValue[], const szNewValue[])
+        update_lifebar_offsets()
 #else
     public update_cvars()
     {
         for (new i; i < CVAR_END; i++)
             g_iCvars[i] = get_pcvar_num(g_pCvars[i])
 
+        for (new i; i < CVARF_END; i++)
+            g_fCvarsF[i] = get_pcvar_float(g_pCvarsF[i])
+
         switch_ATFP(g_iCvars[CVAR_TEAM] || g_iCvars[CVAR_ALIVE])
+        update_lifebar_offsets()
     }
 #endif
+
+stock update_lifebar_offsets()
+{
+    new Float:fOffset[3]
+    fOffset[0] = g_fCvarsF[CVARF_OFFSET_X]
+    fOffset[1] = g_fCvarsF[CVARF_OFFSET_Y]
+    fOffset[2] = g_fCvarsF[CVARF_OFFSET_Z]
+
+    for (new i = 1; i <= 32; i++)
+    {
+        if (g_iLifebar[i])
+        {
+            set_pev(g_iLifebar[i], pev_view_ofs, fOffset)
+            set_pev(g_iLifebar[i], pev_scale, g_fCvarsF[CVARF_SCALE])
+        }
+    }
+}
 
 switch_ATFP(iMode)
 {
